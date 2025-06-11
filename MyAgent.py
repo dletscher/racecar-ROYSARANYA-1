@@ -1,92 +1,67 @@
-import pickle
-import os
+import random
 
 class Agent:
     def __init__(self):
-        self.last_steer = 0.0
-        self.data_file = "mydata.pkl"
+        
+        self.exploration_rate = 0.05
 
-    def chooseAction(self, obs, actions, myData=None):
-        # Initialize myData if None
-        if myData is None:
-            myData = {}
+    def chooseAction(self, observations, possibleActions):
+        
+        distance_sensors = observations['lidar']
+        speed = observations['velocity']
 
-        # Load previously saved data (only once)
-        if not myData.get("loaded", False):
-            if os.path.exists(self.data_file):
-                with open(self.data_file, "rb") as f:
-                    saved = pickle.load(f)
-                    myData.update(saved)
-                    print("✅ Loaded previous MyData")
+        
+        outer_left, mid_left, straight_ahead, mid_right, outer_right = distance_sensors
+
+    
+        total_left = outer_left + mid_left
+        total_right = outer_right + mid_right
+
+        def determine_action():
+            
+            if min(distance_sensors) < 0.1:
+                if ('straight', 'brake') in possibleActions:
+                    return ('straight', 'brake')
+                return random.choice(possibleActions)
+
+            
+            if total_right + 0.2 < total_left:
+                direction = 'left'
+            elif total_left + 0.2 < total_right:
+                direction = 'right'
             else:
-                print("ℹ️ No previous data found. Starting fresh.")
+                direction = 'straight'
 
-            myData["loaded"] = True
-            myData.setdefault("step_count", 0)
-            myData.setdefault("history", [])
+            
+            if straight_ahead < 0.6 or mid_left < 0.5 or mid_right < 0.5:
+                if (direction, 'brake') in possibleActions:
+                    return (direction, 'brake')
 
-        # Update step count
-        myData["step_count"] += 1
+            
+            if speed > 0.19:
+                if (direction, 'brake') in possibleActions:
+                    return (direction, 'brake')
+                elif (direction, 'coast') in possibleActions:
+                    return (direction, 'coast')
 
-        # Read sensors
-        lidar = obs["lidar"]  # [left, fleft, front, fright, right]
-        velocity = obs["velocity"]
-        left, fleft, front, fright, right = lidar
+        
+            if speed <= 0.3 and straight_ahead > 0.8 and mid_left > 0.8 and mid_right > 0.8:
+                if (direction, 'accelerate') in possibleActions:
+                    return (direction, 'accelerate')
 
-        # --- Steering logic ---
-        if front < 0.3:
-            steer = -1.0 if left > right else 1.0
-        elif fleft < 0.4:
-            steer = 0.6
-        elif fright < 0.4:
-            steer = -0.6
+            
+            if (direction, 'coast') in possibleActions:
+                return (direction, 'coast')
+
+            
+            return random.choice(possibleActions)
+
+        
+        if random.random() < self.exploration_rate:
+            return random.choice(possibleActions)
         else:
-            steer = 0.0
+            return determine_action()
 
-        # Smooth steering
-        steer = 0.7 * self.last_steer + 0.3 * steer
-        steer = max(-1.0, min(1.0, steer))
-        self.last_steer = steer
-
-        if steer < -0.3:
-            direction = "left"
-        elif steer > 0.3:
-            direction = "right"
-        else:
-            direction = "straight"
-
-        # --- Speed control ---
-        if front < 0.25:
-            throttle = -1.0
-        elif velocity < 2.2:
-            throttle = 1.0
-        elif velocity > 3.0:
-            throttle = -0.5
-        else:
-            throttle = 0.0
-
-        if throttle > 0.2:
-            speed = "accelerate"
-        elif throttle < -0.2:
-            speed = "brake"
-        else:
-            speed = "coast"
-
-        # Store in history
-        myData["history"].append({
-            "step": myData["step_count"],
-            "velocity": velocity,
-            "front": front,
-            "steer": steer,
-            "direction": direction,
-            "speed": speed
-        })
-
-        return (direction, speed)
-
-    def end(self, myData):
-        """Save data at the end of simulation"""
-        keys_to_save = {k: v for k, v in myData.items() if k not in ("loaded",)}
-        with open(self.data_file, "wb") as f:
-            pickle.dump(keys_to_save, f)
-        print(f"💾 MyData saved with {keys_to_save.get('step_count', 0)} steps.")
+    def load(self, data=None):
+    
+        pass
